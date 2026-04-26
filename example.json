@@ -1,0 +1,18 @@
+{
+  "defaultOutputRoot": null,
+  "maxHeight": 1080,
+  "subtitleLanguages": ["en"],
+  "subtitleMode": "manual-preferred",
+  "proseTranscript": true,
+  "overwrite": "reuse",
+  "inferenceModelMode": "pinned",
+  "pinnedInferenceModel": "openai-codex/gpt-5.4-mini",
+  "inferenceThinking": "medium",
+  "inferenceChunkTimeoutMs": 60000,
+  "throttle": {
+    "sleepIntervalSec": 1,
+    "maxSleepIntervalSec": 3,
+    "retries": 3,
+    "fragmentRetries": 3
+  }
+}

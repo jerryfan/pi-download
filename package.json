@@ -32,7 +32,10 @@
     "README.md",
     "SPEC.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "CONTRIBUTING.md",
+    "RELEASE.md",
+    "LICENSE",
+    "example.json"
   ],
   "publishConfig": {
     "access": "public"
