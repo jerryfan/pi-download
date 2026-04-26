@@ -1,6 +1,6 @@
 {
   "name": "pi-download",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pi extension: /dl <url> downloads YouTube video/audio/subtitles and emits a prose subtitle .txt with exact-word fidelity.",
   "license": "MIT",
   "repository": {
