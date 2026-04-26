@@ -1,0 +1,46 @@
+{
+  "name": "pi-download",
+  "version": "0.1.0",
+  "description": "Pi extension: /dl <url> downloads YouTube video/audio/subtitles and emits a prose subtitle .txt with exact-word fidelity.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jerryfan/pi-download.git"
+  },
+  "homepage": "https://github.com/jerryfan/pi-download",
+  "bugs": {
+    "url": "https://github.com/jerryfan/pi-download/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "extension",
+    "youtube",
+    "yt-dlp",
+    "subtitles",
+    "transcript",
+    "download"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "index.ts",
+    "src/**",
+    "README.md",
+    "SPEC.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@sinclair/typebox": "*"
+  }
+}
