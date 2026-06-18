@@ -1,12 +1,29 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { readdir } from "node:fs/promises";
 import { runDoctor } from "./doctor";
 import { runDl } from "./pipeline";
 import { loadConfig } from "./config";
+import { resolveSystemDownloadsDir } from "./downloads-dir";
 import { entryToWatchUrl, ytListEntries } from "./yt";
 
 function isUrlLike(s: string): boolean {
 	const v = s.trim();
 	return v.startsWith("http://") || v.startsWith("https://") || v.startsWith("youtu.be/") || v.includes("youtube.com/");
+}
+
+async function existingVideoIdsInOutputRoot(outputRoot: string): Promise<Set<string>> {
+	try {
+		const entries = await readdir(outputRoot, { withFileTypes: true });
+		const ids = new Set<string>();
+		for (const e of entries) {
+			if (!e.isDirectory()) continue;
+			const m = e.name.match(/-yt-([A-Za-z0-9_-]{6,})$/);
+			if (m?.[1]) ids.add(m[1]);
+		}
+		return ids;
+	} catch {
+		return new Set();
+	}
 }
 
 export async function runDlCommand(pi: ExtensionAPI, args: string, ctx: ExtensionContext): Promise<void> {
@@ -74,7 +91,15 @@ export async function runSubsCommand(pi: ExtensionAPI, args: string, ctx: Extens
 			})
 			.filter((x) => !interestTerms.length || x.score > 0)
 			.sort((a, b) => b.score - a.score);
-		const selectedEntries = (scoredEntries.length ? scoredEntries.map((x) => x.entry) : entries).slice(0, 10);
+		const orderedEntries = scoredEntries.length ? scoredEntries.map((x) => x.entry) : entries;
+		const existingIds = await existingVideoIdsInOutputRoot(cfg.defaultOutputRoot || resolveSystemDownloadsDir());
+		const selectedEntries = [];
+		for (const entry of orderedEntries) {
+			const id = entry.id || entry.url;
+			if (id && existingIds.has(id)) continue;
+			selectedEntries.push(entry);
+			if (selectedEntries.length >= 10) break;
+		}
 		const videoUrls = [...new Set(selectedEntries.map(entryToWatchUrl).filter((v): v is string => !!v))];
 
 		if (videoUrls.length > 1 || /youtube\.com\/@|\/channel\/|\/playlist\?|\/videos\b/i.test(url)) {
@@ -83,7 +108,7 @@ export async function runSubsCommand(pi: ExtensionAPI, args: string, ctx: Extens
 				if (ctx.hasUI) ctx.ui.setStatus("dl", `subs: ${i + 1}/${videoUrls.length}`);
 				manifests.push(await runDl(pi, ctx, { url: videoUrls[i], media: "subs-only", proseTranscript: true, minimalFiles: true }, ctx.signal));
 			}
-			ctx.ui.notify(["subs collection done", `items: ${manifests.length}`, interest ? `interest: ${interest}` : "interest: latest", "limit: 10", manifests[0] ? `first out: ${manifests[0].request.outDir}` : "out: (none)"].join("\n"), "info");
+			ctx.ui.notify(["subs collection done", `items: ${manifests.length}`, interest ? `interest: ${interest}` : "interest: latest", "limit: 10 new videos", manifests[0] ? `first out: ${manifests[0].request.outDir}` : "out: (none)"].join("\n"), "info");
 			return;
 		}
 
