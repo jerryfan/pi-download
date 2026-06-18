@@ -53,7 +53,9 @@ export async function runSubsCommand(pi: ExtensionAPI, args: string, ctx: Extens
 		return;
 	}
 
-	const url = normalizeUrl(a);
+	const parts = a.split(/\s+/);
+	const url = normalizeUrl(parts[0] ?? "");
+	const interest = parts.slice(1).join(" ").trim();
 	if (!isUrlLike(url)) {
 		ctx.ui.notify("/subs expects a URL", "error");
 		return;
@@ -63,7 +65,17 @@ export async function runSubsCommand(pi: ExtensionAPI, args: string, ctx: Extens
 		const cfg = loadConfig();
 		const listUrl = /youtube\.com\/@[^/?#]+\/?(?:[?#].*)?$/i.test(url) ? url.replace(/\/?(?:[?#].*)?$/, "/videos") : url;
 		const entries = await ytListEntries(pi, listUrl, cfg, ctx.signal);
-		const videoUrls = [...new Set(entries.map(entryToWatchUrl).filter((v): v is string => !!v))];
+		const interestTerms = interest.toLowerCase().split(/\s+/).filter(Boolean);
+		const scoredEntries = entries
+			.map((entry) => {
+				const title = (entry.title ?? "").toLowerCase();
+				const score = interestTerms.length ? interestTerms.reduce((n, term) => n + (title.includes(term) ? 1 : 0), 0) : 0;
+				return { entry, score };
+			})
+			.filter((x) => !interestTerms.length || x.score > 0)
+			.sort((a, b) => b.score - a.score);
+		const selectedEntries = (scoredEntries.length ? scoredEntries.map((x) => x.entry) : entries).slice(0, 10);
+		const videoUrls = [...new Set(selectedEntries.map(entryToWatchUrl).filter((v): v is string => !!v))];
 
 		if (videoUrls.length > 1 || /youtube\.com\/@|\/channel\/|\/playlist\?|\/videos\b/i.test(url)) {
 			const manifests = [];
@@ -71,7 +83,7 @@ export async function runSubsCommand(pi: ExtensionAPI, args: string, ctx: Extens
 				if (ctx.hasUI) ctx.ui.setStatus("dl", `subs: ${i + 1}/${videoUrls.length}`);
 				manifests.push(await runDl(pi, ctx, { url: videoUrls[i], media: "subs-only", proseTranscript: true, minimalFiles: true }, ctx.signal));
 			}
-			ctx.ui.notify(["subs collection done", `items: ${manifests.length}`, manifests[0] ? `first out: ${manifests[0].request.outDir}` : "out: (none)"].join("\n"), "info");
+			ctx.ui.notify(["subs collection done", `items: ${manifests.length}`, interest ? `interest: ${interest}` : "interest: latest", "limit: 10", manifests[0] ? `first out: ${manifests[0].request.outDir}` : "out: (none)"].join("\n"), "info");
 			return;
 		}
 

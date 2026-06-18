@@ -10,7 +10,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("subs", {
-		description: "Download only YouTube subtitles and generate best prose .txt with minimal files. Usage: /subs <url>",
+		description: "Download only YouTube subtitles and generate prose .txt. Channel URLs are capped at 10 videos and may include interest terms. Usage: /subs <url> [interest terms]",
 		handler: async (args, ctx) => runSubsCommand(pi, args, ctx),
 	});
 
