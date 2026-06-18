@@ -13,8 +13,8 @@ export const DEFAULT_CONFIG: PiDownloadConfig = {
 	proseTranscript: true,
 	overwrite: "reuse",
 	inferenceModelMode: "pinned",
-	pinnedInferenceModel: "openai-codex/gpt-5.4-mini",
-	inferenceThinking: "medium",
+	pinnedInferenceModel: "openai-codex/gpt-5.5",
+	inferenceThinking: "minimal",
 	inferenceChunkTimeoutMs: 60_000,
 	throttle: {
 		sleepIntervalSec: 1,

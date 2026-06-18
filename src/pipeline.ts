@@ -1,10 +1,11 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { resolveSystemDownloadsDir } from "./downloads-dir";
 import { loadConfig } from "./config";
 import type { ManifestV1, PiDownloadConfig, SelectedSubtitle, TranscriptAuditV1 } from "./types";
 import { inferProseFormatting, inferShortLabel } from "./infer";
+import { buildVideoReferenceMetadata, renderBibliography, renderVideoReferenceBlock } from "./metadata";
 import { slugifyLabel } from "./slug";
 import { ytDownloadAudio, ytDownloadMergedVideo, ytDownloadSubtitles, ytInspect } from "./yt";
 import {
@@ -89,6 +90,8 @@ export async function runDl(
 		subtitleMode?: "manual-preferred" | "manual-only" | "auto-ok";
 		proseTranscript?: boolean;
 		overwrite?: "reuse" | "replace";
+		media?: "all" | "subs-only";
+		minimalFiles?: boolean;
 	},
 	signal?: AbortSignal,
 ): Promise<ManifestV1> {
@@ -186,11 +189,18 @@ export async function runDl(
 		const audioBase = join(mediaDir, `${basePrefix}.audio`);
 		const subsBase = join(rawSubsDir, `${basePrefix}`);
 
-		if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: video");
-		await step("yt-dlp video", () => ytDownloadMergedVideo(pi, url, videoBase, cfg, signal));
+		const mediaMode = input.media ?? "all";
+		const minimalFiles = input.minimalFiles ?? false;
 
-		if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: audio");
-		await step("yt-dlp audio", () => ytDownloadAudio(pi, url, audioBase, cfg, signal));
+		if (mediaMode !== "subs-only") {
+			if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: video");
+			await step("yt-dlp video", () => ytDownloadMergedVideo(pi, url, videoBase, cfg, signal));
+
+			if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: audio");
+			await step("yt-dlp audio", () => ytDownloadAudio(pi, url, audioBase, cfg, signal));
+		} else {
+			dbg("subs-only mode: skipping video and audio downloads");
+		}
 
 		const subtitleLangs = pickSubtitleLanguages(info, cfg, input.subtitleLanguages ?? []);
 		dbg(`subtitleLangs: ${subtitleLangs.join(",") || "(none)"}`);
@@ -209,6 +219,7 @@ export async function runDl(
 		let verifierPassed = false;
 		let modelUsed: string | undefined;
 		let removedSpansCount = 0;
+		let videoReference = buildVideoReferenceMetadata(info, url);
 
 		if (selected.length > 0) {
 			if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: subtitles");
@@ -238,6 +249,7 @@ export async function runDl(
 						removedSpansCount += deduped.removed.length;
 						// dedupeCuesToWords returns verifier-grade word tokens already.
 						const expectedWords = deduped.words;
+						videoReference = buildVideoReferenceMetadata(info, url, expectedWords);
 						dbg(`cues=${cues.length}, expectedWords=${expectedWords.length}, removedSpans=${deduped.removed.length}`);
 
 						// Chunked VTT->TXT conversion (resilient): process in small word chunks,
@@ -263,9 +275,8 @@ export async function runDl(
 							},
 						};
 
-						await step(`write transcript header (${sub.language})`, async () => {
-							const header = `yt=${videoId} lang=${sub.language} kind=${sub.kind} url=${url}`;
-							await writeFile(outTxt, `${header}\n---\n`, "utf-8");
+						await step(`write transcript reference (${sub.language})`, async () => {
+							await writeFile(outTxt, renderVideoReferenceBlock(videoReference), "utf-8");
 						});
 
 						for (let ci = 0; ci < totalChunks; ci++) {
@@ -333,6 +344,8 @@ export async function runDl(
 							audit.failureReason = "verifier failed for at least one chunk";
 						}
 
+						await appendFile(outTxt, renderBibliography(videoReference), "utf-8");
+
 						await step(`write audit (${sub.language})`, async () => {
 							await writeAudit(outAudit, audit);
 						});
@@ -351,9 +364,8 @@ export async function runDl(
 							stats: { rawCueCount: 0, rawWordCount: 0, outputWordCount: 0, paragraphCount: 0 },
 							failureReason: String(e?.message ?? e),
 						};
-						await step(`write transcript header (${sub.language})`, async () => {
-							const header = `yt=${videoId} lang=${sub.language} kind=${sub.kind} url=${url}`;
-							await writeFile(outTxt, `${header}\n---\n`, "utf-8");
+						await step(`write transcript reference (${sub.language})`, async () => {
+							await writeFile(outTxt, renderVideoReferenceBlock(videoReference), "utf-8");
 						});
 						await step(`write audit (${sub.language})`, async () => {
 							await writeAudit(outAudit, audit);
@@ -365,21 +377,40 @@ export async function runDl(
 			}
 		}
 
+		if (minimalFiles) {
+			for (const p of [...rawSubtitlePaths, ...auditPaths]) {
+				await step(`remove intermediate ${p}`, async () => {
+					await rm(p, { force: true });
+				});
+			}
+			rawSubtitlePaths = [];
+			auditPaths = [];
+		}
+
 		const manifestPath = join(outDir, "manifest.json");
-		const videoPath = await findDownloadedFile(mediaDir, `${basePrefix}.video.`, "");
-		const audioPath = await findDownloadedFile(mediaDir, `${basePrefix}.audio.`, "");
+		const videoPath = mediaMode === "subs-only" ? undefined : await findDownloadedFile(mediaDir, `${basePrefix}.video.`, "");
+		const audioPath = mediaMode === "subs-only" ? undefined : await findDownloadedFile(mediaDir, `${basePrefix}.audio.`, "");
 
 		const manifest: ManifestV1 = {
 			version: 1,
 			extension: { name: "pi-download", version: "0.1.0" },
 			source: {
 				provider: "youtube",
-				url,
+				url: videoReference.url,
 				videoId,
 				title: info.title,
-				channel: info.uploader,
+				channel: videoReference.channelName ?? info.uploader,
+				channelUrl: videoReference.channelUrl,
+				uploader: videoReference.uploader,
+				uploaderUrl: videoReference.uploaderUrl,
+				uploadDate: videoReference.uploadDate,
 				durationSec: info.duration,
+				description: videoReference.description,
+				tags: videoReference.tags,
+				chapters: videoReference.chapters,
 			},
+			participants: videoReference.participants,
+			referencedPeople: videoReference.referencedPeople,
 			request: {
 				outDir,
 				maxHeight: cfg.maxHeight,

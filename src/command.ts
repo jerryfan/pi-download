@@ -1,6 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { runDoctor } from "./doctor";
 import { runDl } from "./pipeline";
+import { loadConfig } from "./config";
+import { entryToWatchUrl, ytListEntries } from "./yt";
 
 function isUrlLike(s: string): boolean {
 	const v = s.trim();
@@ -40,6 +42,49 @@ export async function runDlCommand(pi: ExtensionAPI, args: string, ctx: Extensio
 		ctx.ui.notify(lines.join("\n"), "info");
 	} catch (e: any) {
 		ctx.ui.setStatus("dl", "dl: error");
+		ctx.ui.notify(String(e?.message ?? e), "error");
+	}
+}
+
+export async function runSubsCommand(pi: ExtensionAPI, args: string, ctx: ExtensionContext): Promise<void> {
+	const a = (args ?? "").trim();
+	if (!a) {
+		ctx.ui.notify("Usage: /subs <url>", "info");
+		return;
+	}
+
+	const url = normalizeUrl(a);
+	if (!isUrlLike(url)) {
+		ctx.ui.notify("/subs expects a URL", "error");
+		return;
+	}
+
+	try {
+		const cfg = loadConfig();
+		const listUrl = /youtube\.com\/@[^/?#]+\/?(?:[?#].*)?$/i.test(url) ? url.replace(/\/?(?:[?#].*)?$/, "/videos") : url;
+		const entries = await ytListEntries(pi, listUrl, cfg, ctx.signal);
+		const videoUrls = [...new Set(entries.map(entryToWatchUrl).filter((v): v is string => !!v))];
+
+		if (videoUrls.length > 1 || /youtube\.com\/@|\/channel\/|\/playlist\?|\/videos\b/i.test(url)) {
+			const manifests = [];
+			for (let i = 0; i < videoUrls.length; i++) {
+				if (ctx.hasUI) ctx.ui.setStatus("dl", `subs: ${i + 1}/${videoUrls.length}`);
+				manifests.push(await runDl(pi, ctx, { url: videoUrls[i], media: "subs-only", proseTranscript: true, minimalFiles: true }, ctx.signal));
+			}
+			ctx.ui.notify(["subs collection done", `items: ${manifests.length}`, manifests[0] ? `first out: ${manifests[0].request.outDir}` : "out: (none)"].join("\n"), "info");
+			return;
+		}
+
+		const manifest = await runDl(pi, ctx, { url: videoUrls[0] ?? url, media: "subs-only", proseTranscript: true, minimalFiles: true }, ctx.signal);
+		const lines = [
+			"subs done",
+			`out: ${manifest.request.outDir}`,
+			manifest.outputs.proseTranscriptPaths[0] ? `txt: ${manifest.outputs.proseTranscriptPaths[0]}` : "txt: (none)",
+			`manifest: ${manifest.outputs.manifestPath}`,
+		];
+		ctx.ui.notify(lines.join("\n"), "info");
+	} catch (e: any) {
+		ctx.ui.setStatus("dl", "subs: error");
 		ctx.ui.notify(String(e?.message ?? e), "error");
 	}
 }
