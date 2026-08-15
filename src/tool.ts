@@ -7,9 +7,9 @@ export function downloadVideoBundleTool(_pi: ExtensionAPI) {
 	return {
 		name: "download_video_bundle",
 		label: "download_video_bundle",
-		description: "Download a YouTube URL into the system Downloads folder (video+audio+subs+prose .txt).",
+		description: "Download a YouTube bundle, public Threads video, or Reddit video into the system Downloads folder.",
 		parameters: Type.Object({
-			url: Type.String({ description: "YouTube URL" }),
+			url: Type.String({ description: "YouTube, public Threads post, or Reddit post URL" }),
 			outDir: Type.Optional(Type.String({ description: "Override output directory (default: system Downloads folder)" })),
 			maxHeight: Type.Optional(Type.Number({ description: "Max video height (default: 1080)" })),
 			subtitleLanguages: Type.Optional(Type.Array(Type.String(), { description: "Subtitle language codes" })),
@@ -17,9 +17,9 @@ export function downloadVideoBundleTool(_pi: ExtensionAPI) {
 			proseTranscript: Type.Optional(Type.Boolean({ description: "Generate prose transcript .txt (default true)" })),
 			overwrite: Type.Optional(StringEnum(["reuse", "replace"] as const)),
 		}),
-		promptSnippet: "Download a YouTube URL into Downloads folder and generate a prose subtitle .txt without changing words.",
+		promptSnippet: "Download a YouTube bundle, public Threads video, or Reddit video into Downloads; available subtitles get an exact-word prose .txt.",
 		promptGuidelines: [
-			"Use download_video_bundle for YouTube downloads instead of hand-writing yt-dlp commands.",
+			"Use download_video_bundle for YouTube, public Threads, and Reddit video downloads instead of hand-writing downloader commands.",
 			"The prose transcript must keep the exact same words as the subtitles (no paraphrase), only formatting/punctuation/paragraphing is allowed.",
 		],
 		async execute(_toolCallId: string, params: any, signal: AbortSignal, _onUpdate: any, ctx: any) {

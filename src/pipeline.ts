@@ -7,6 +7,7 @@ import type { ManifestV1, PiDownloadConfig, SelectedSubtitle, TranscriptAuditV1 
 import { inferProseFormatting, inferShortLabel } from "./infer";
 import { buildVideoReferenceMetadata, renderBibliography, renderVideoReferenceBlock } from "./metadata";
 import { slugifyLabel } from "./slug";
+import { threadsDownloadVideo, threadsInspect } from "./threads";
 import { ytDownloadAudio, ytDownloadMergedVideo, ytDownloadSubtitles, ytInspect } from "./yt";
 import {
 	countParagraphs,
@@ -132,7 +133,10 @@ export async function runDl(
 
 	try {
 		if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: inspect");
-		const info = await ytInspect(pi, url, cfg, signal);
+		const isThreads = /^https?:\/\/(?:www\.)?threads\.com\//i.test(url);
+		const isReddit = /^https?:\/\/(?:www\.)?reddit\.com\//i.test(url);
+		const info = isThreads ? await threadsInspect(url, signal) : await ytInspect(pi, url, cfg, signal);
+		const provider = isThreads ? "threads" : isReddit ? "reddit" : "youtube";
 		const videoId = info.id;
 		const title = info.title ?? "";
 
@@ -140,7 +144,7 @@ export async function runDl(
 			? await inferShortLabel(ctx, cfg, title, signal ?? new AbortController().signal)
 			: slugifyLabel(videoId);
 
-		const baseFolder = `${label}-yt-${videoId}`;
+		const baseFolder = `${label}-${provider}-${videoId}`;
 		let outDir = join(outputRoot, baseFolder);
 		if (cfg.overwrite === "reuse") {
 			// If folder exists but is for another videoId, suffix.
@@ -184,7 +188,7 @@ export async function runDl(
 		const rawSubsDir = outDir;
 		const proseDir = outDir;
 
-		const basePrefix = `${label}-yt-${videoId}`;
+		const basePrefix = `${label}-${provider}-${videoId}`;
 		const videoBase = join(mediaDir, `${basePrefix}.video`);
 		const audioBase = join(mediaDir, `${basePrefix}.audio`);
 		const subsBase = join(rawSubsDir, `${basePrefix}`);
@@ -194,15 +198,18 @@ export async function runDl(
 
 		if (mediaMode !== "subs-only") {
 			if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: video");
-			await step("yt-dlp video", () => ytDownloadMergedVideo(pi, url, videoBase, cfg, signal));
-
-			if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: audio");
-			await step("yt-dlp audio", () => ytDownloadAudio(pi, url, audioBase, cfg, signal));
+			if (isThreads) {
+				await step("Threads video", () => threadsDownloadVideo(info, `${videoBase}.mp4`, signal));
+			} else {
+				await step("yt-dlp video", () => ytDownloadMergedVideo(pi, url, videoBase, cfg, signal));
+				if (ctx.hasUI) ctx.ui.setStatus("dl", "dl: audio");
+				await step("yt-dlp audio", () => ytDownloadAudio(pi, url, audioBase, cfg, signal));
+			}
 		} else {
 			dbg("subs-only mode: skipping video and audio downloads");
 		}
 
-		const subtitleLangs = pickSubtitleLanguages(info, cfg, input.subtitleLanguages ?? []);
+		const subtitleLangs = isThreads ? [] : pickSubtitleLanguages(info, cfg, input.subtitleLanguages ?? []);
 		dbg(`subtitleLangs: ${subtitleLangs.join(",") || "(none)"}`);
 		const selected: SelectedSubtitle[] = [];
 		for (const lang of subtitleLangs) {
@@ -395,7 +402,7 @@ export async function runDl(
 			version: 1,
 			extension: { name: "pi-download", version: "0.1.0" },
 			source: {
-				provider: "youtube",
+				provider: provider as "youtube" | "threads" | "reddit",
 				url: videoReference.url,
 				videoId,
 				title: info.title,

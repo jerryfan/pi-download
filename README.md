@@ -1,11 +1,11 @@
 # pi-download
 
-A Pi extension that turns a YouTube URL into a local bundle in your system Downloads folder.
+A Pi extension that turns a YouTube or Reddit URL into a local bundle, or a public Threads video post into an MP4, in your system Downloads folder.
 
 Happy path:
 
 ```text
-/dl <url>
+/dl <youtube-threads-or-reddit-url>
 ```
 
 Doctor:

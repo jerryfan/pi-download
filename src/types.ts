@@ -88,7 +88,7 @@ export type ManifestV1 = {
 	version: 1;
 	extension: { name: "pi-download"; version: string };
 	source: {
-		provider: "youtube";
+		provider: "youtube" | "threads" | "reddit";
 		url: string;
 		videoId: string;
 		title?: string;
