@@ -4,13 +4,17 @@ on:
   push:
   workflow_dispatch:
 
+concurrency:
+  group: pi-download-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   pack:
     # Never run a public fork or a non-owner initiated event on the persistent Golf host.
-    if: ${{ github.actor == 'jerryfan' }}
+    if: ${{ github.actor == github.repository_owner }}
     runs-on: [self-hosted, linux, x64, gofaster-ci]
     steps:
       - uses: actions/checkout@v4
