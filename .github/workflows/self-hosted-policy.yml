@@ -1,0 +1,25 @@
+name: Self-hosted workflow policy
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/assert-self-hosted-workflows.py'
+  workflow_dispatch:
+
+concurrency:
+  group: self-hosted-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    if: ${{ github.actor == github.repository_owner }}
+    runs-on: [self-hosted, linux, x64, gofaster-ci]
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce GoFaster-only execution
+        run: python3 .github/scripts/assert-self-hosted-workflows.py
