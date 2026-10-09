@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   pack:
-    # Public repository: only trusted pushes and owner-triggered dispatch reach Golf.
+    # Never run a public fork or a non-owner initiated event on the persistent Golf host.
+    if: ${{ github.actor == 'jerryfan' }}
     runs-on: [self-hosted, linux, x64, gofaster-ci]
     steps:
       - uses: actions/checkout@v4
