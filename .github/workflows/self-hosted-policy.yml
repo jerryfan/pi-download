@@ -16,8 +16,11 @@ permissions:
 
 jobs:
   policy:
-    if: ${{ github.actor == github.repository_owner }}
-    runs-on: [self-hosted, linux, x64, gofaster-ci]
+    # DECOMMISSIONED: this repository is outside Design/downstream CI.
+    # No self-hosted Golf worker and no GitHub-hosted fallback are authorized.
+    # Explicitly choose a separate CI policy before re-enabling this job.
+    if: ${{ false }}
+    runs-on: ubuntu-latest # inert while job-level if=false; no hosted minutes used
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
